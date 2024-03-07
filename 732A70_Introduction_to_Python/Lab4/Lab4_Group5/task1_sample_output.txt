@@ -1,0 +1,50 @@
+Total number of words: 991877
+Total number of unique words: 26618
+Alphabetic Letter frequencies Table (most common to least):
+e: 480970
+t: 354107
+o: 332717
+a: 309408
+i: 268911
+s: 266424
+n: 260133
+h: 255742
+r: 251863
+l: 180723
+d: 158715
+u: 137354
+m: 117435
+y: 99484
+w: 96315
+c: 91697
+f: 86140
+g: 72858
+b: 64067
+p: 61506
+v: 40149
+k: 37823
+x: 5331
+j: 4905
+q: 3961
+z: 1842
+5 Most common words and their successors:
+the (30103 occurrences)
+-- king, 901
+-- world, 483
+-- duke, 422
+and (28444 occurrences)
+-- i, 890
+-- the, 856
+-- so, 434
+i (23869 occurrences)
+-- am, 1958
+-- ll, 1808
+-- have, 1715
+to (21289 occurrences)
+-- the, 1548
+-- be, 1047
+-- me, 509
+of (18839 occurrences)
+-- the, 1625
+-- my, 760
+-- his, 636
