@@ -1,0 +1,129 @@
+---
+title: "study"
+author: "Xuan Wang"
+date: "2024-04-26"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+Sure, I'd be happy to explain these terms in more detail. They are the updated hyperparameters for the conjugate prior of the parameters in the Bayesian linear regression model.
+
+1. **Omega_n**: This is the precision matrix (the inverse of the covariance matrix) of the multivariate normal prior for the regression coefficients (β0, β1, β2). It is updated based on the prior precision matrix (Omega0) and the design matrix X (which contains the time and time^2 variables). The formula to update Omega_n is:
+
+    $$\Omega_n = (\Omega_0^{-1} + X^T X)^{-1}$$
+
+2. **mu_n**: This is the mean vector of the multivariate normal prior for the regression coefficients. It is updated based on the prior mean vector (mu0), the prior precision matrix (Omega0), and the response variable (temp). The formula to update mu_n is:
+
+    $$\mu_n = \Omega_n (\Omega_0^{-1} \mu_0 + X^T \text{temp})$$
+
+3. **nu_n**: This is the degrees of freedom of the inverse chi-square prior for the variance parameter (σ^2). It is updated based on the prior degrees of freedom (nu0) and the number of observations. The formula to update nu_n is:
+
+    $$\nu_n = \nu_0 + N$$
+
+    where N is the number of observations.
+
+4. **sigma_n2**: This is the scale parameter of the inverse chi-square prior for the variance parameter. It is updated based on the prior degrees of freedom (nu0), the prior scale parameter (sigma02), the response variable (temp), the design matrix X, and the prior and updated mean vectors (mu0 and mu_n). The formula to update sigma_n2 is:
+
+    $$\sigma_n^2 = \frac{\nu_0 \sigma_0^2 + (temp - X \mu_n)^T (temp - X \mu_n) + (\mu_0 - \mu_n)^T (\Omega_0^{-1} + \Omega_n^{-1}) (\mu_0 - \mu_n)}{\nu_n}$$
+
+These updated hyperparameters are then used to simulate draws from the posterior distribution of the parameters. I hope this helps! Let me know if you have any more questions.
+
+
+
+Sure, I'd be happy to explain. The formula for `sigma02_n` is given by:
+
+$$\sigma02_n = \frac{\nu0 \cdot \sigma02 + (y - X \cdot \mu0)^T \cdot (y - X \cdot \mu0) + \mu0^T \cdot \Omega0^{-1} \cdot \mu0 - \mu_n^T \cdot \Omega_n^{-1} \cdot \mu_n}{\nu_n}$$
+
+Here's a step-by-step breakdown of the formula:
+
+1. **Prior precision-weighted sum of squares (`nu0 * sigma02`)**: This term represents the prior sum of squares, weighted by the prior degrees of freedom (`nu0`). The prior sum of squares is `sigma02`, which is the prior variance. Multiplying this by `nu0` gives the prior precision-weighted sum of squares.
+
+2. **Residual sum of squares (`(y - X * mu0)^T * (y - X * mu0)`)**: This term represents the sum of squares of the residuals from the regression of `y` on `X` with coefficients `mu0`. It measures the total variation in `y` that is not explained by the regression.
+
+3. **Prior precision-weighted square of the mean (`mu0^T * Omega0^-1 * mu0`)**: This term represents the square of the prior mean `mu0`, weighted by the inverse of the prior covariance matrix `Omega0`. It measures the total variation in the prior mean that is not explained by the prior covariance.
+
+4. **Posterior precision-weighted square of the mean (`mu_n^T * Omega_n^-1 * mu_n`)**: This term represents the square of the posterior mean `mu_n`, weighted by the inverse of the posterior covariance matrix `Omega_n`. It measures the total variation in the posterior mean that is not explained by the posterior covariance.
+
+5. **Posterior degrees of freedom (`nu_n`)**: The denominator of the formula is the posterior degrees of freedom, which is the sum of the prior degrees of freedom (`nu0`) and the number of observations.
+
+The formula for `sigma02_n` is derived from the conjugate prior for the linear regression model, which is a normal-inverse-gamma distribution. The normal-inverse-gamma distribution is the conjugate prior for a multivariate normal distribution with unknown mean and variance, which makes it a natural choice for the Bayesian linear regression model. The formula for `sigma02_n` updates the prior variance `sigma02` with information from the data to obtain the posterior variance. The update takes into account both the fit of the model to the data (through the residual sum of squares) and the prior beliefs about the parameters (through the prior precision-weighted sum of squares and the prior precision-weighted square of the mean). The posterior precision-weighted square of the mean is subtracted to ensure that the posterior variance is smaller than the prior variance if the data provide information about the parameters. The posterior degrees of freedom in the denominator ensure that the posterior variance is a weighted average of the prior variance and the sample variance. 
+
+
+The formula for `sigma02_n` is derived from the conjugate prior for the linear regression model, which is a normal-inverse-gamma distribution. The normal-inverse-gamma distribution is the conjugate prior for a multivariate normal distribution with unknown mean and variance, which makes it a natural choice for the Bayesian linear regression model.
+
+The formula for `sigma02_n` updates the prior variance `sigma02` with information from the data to obtain the posterior variance. The update takes into account both the fit of the model to the data (through the residual sum of squares) and the prior beliefs about the parameters (through the prior precision-weighted sum of squares and the prior precision-weighted square of the mean). The posterior precision-weighted square of the mean is subtracted to ensure that the posterior variance is smaller than the prior variance if the data provide information about the parameters. The posterior degrees of freedom in the denominator ensure that the posterior variance is a weighted average of the prior variance and the sample variance.
+
+Now, let's address your specific questions:
+
+1. **Why not `sigma02_n <- (nu0 * sigma02 + t(data$temp - X %*% mu_n) %*% (data$temp - X %*% mu_n) + t(mu0 - mu_n) %*% solve(Omega0 + Omega_n) %*% (mu0 - mu_n)) / nu_n`?**
+
+   This formula is not correct because it does not correctly update the prior variance `sigma02` with information from the data. The term `t(data$temp - X %*% mu_n) %*% (data$temp - X %*% mu_n)` is the sum of squares of the residuals from the regression of `y` on `X` with coefficients `mu_n`, not `mu0`. This term should be `t(y - X %*% mu0) %*% (y - X %*% mu0)`, which is the sum of squares of the residuals from the regression of `y` on `X` with coefficients `mu0`.
+
+2. **Why not `sigma02_n <- (nu0 * sigma02 + t(data$temp) %*% data$temp + t(mu0) %*% Omega0_inv %*% mu0 - t(mu_n) %*% solve(Omega_n) %*% mu_n) / nu_n`?**
+
+   This formula is not correct because the term `t(data$temp) %*% data$temp` is the sum of squares of `y`, not the sum of squares of the residuals from the regression of `y` on `X`. This term should be `t(y - X %*% mu0) %*% (y - X %*% mu0)`, which is the sum of squares of the residuals from the regression of `y` on `X` with coefficients `mu0`.
+
+I hope this helps! If you have any further questions, feel free to ask.
+
+
+
+
+
+In the Bayesian linear regression model, the posterior distribution of the parameters is updated from the prior distribution using the observed data. The hyperparameters of the posterior distribution, `Omega_n`, `mu_n`, `nu_n`, and `sigma02_n`, are calculated as follows:
+
+- `Omega_n` is the precision matrix of the posterior distribution of the regression coefficients. It is calculated as the inverse of the sum of the precision matrix of the prior distribution (`Omega0_inv`) and the design matrix `X` transposed and multiplied by itself. Mathematically, this is represented as:
+
+$$\Omega_n = (\Omega_0^{-1} + X^T X)^{-1}$$
+
+- `mu_n` is the mean vector of the posterior distribution of the regression coefficients. It is calculated as `Omega_n` multiplied by the sum of `Omega0_inv` and `mu0` and `X` transposed and multiplied by the response variable `temp`. Mathematically, this is represented as:
+
+$$\mu_n = \Omega_n (\Omega_0^{-1} \mu_0 + X^T temp)$$
+
+- `nu_n` is the degrees of freedom of the posterior distribution of the residual variance. It is calculated as `nu0` plus the number of observations. Mathematically, this is represented as:
+
+$$\nu_n = \nu_0 + n$$
+
+- `sigma02_n` is the scale parameter of the posterior distribution of the residual variance. It is calculated as the sum of the squared residuals and the prior scale parameter `sigma02`, divided by `nu_n`. Mathematically, this is represented as:
+
+$$\sigma_{0n}^2 = \frac{temp^T temp + \mu_0^T \Omega_0^{-1} \mu_0 - \mu_n^T \Omega_n^{-1} \mu_n}{\nu_n}$$
+
+The formulas you suggested are not correct because they do not take into account the prior information (`mu0` and `Omega0`) and they do not correctly calculate the posterior mean (`mu_n`) and precision (`Omega_n`) of the regression coefficients. The correct formulas take into account both the prior information and the observed data to update the posterior distribution of the parameters. This is the essence of Bayesian analysis. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+The reason for using `sigma2 <- 1 / rchisq(n, nu0, ncp = nu0 * sigma02)` instead of `sigma2 <- 1 / rchisq(n, nu0, ncp = sigma02)` is because of the definition of the Inverse Chi-Square distribution, which is often used as a conjugate prior for the variance parameter in Bayesian analysis.
+
+In the Inverse Chi-Square distribution, if $$\sigma^2$$ follows an Inverse Chi-Square distribution with $$\nu_0$$ degrees of freedom and scale parameter $$\sigma_0^2$$, then $$\frac{\nu_0 \sigma_0^2}{\sigma^2}$$ follows a Chi-Square distribution with $$\nu_0$$ degrees of freedom. Therefore, to generate a random sample from the Inverse Chi-Square distribution, we can generate a random sample from the Chi-Square distribution and take the reciprocal, scaling by the appropriate factors.
+
+In the code `rchisq(n, nu0, ncp = nu0 * sigma02)`, `nu0` is the degrees of freedom, and `ncp = nu0 * sigma02` is the non-centrality parameter of the Chi-Square distribution, which is equal to $$\nu_0 \sigma_0^2$$ according to the definition of the Inverse Chi-Square distribution. Therefore, `1 / rchisq(n, nu0, ncp = nu0 * sigma02)` generates a random sample from the Inverse Chi-Square distribution with $$\nu_0$$ degrees of freedom and scale parameter $$\sigma_0^2$$. 
+
+If we used `sigma2 <- 1 / rchisq(n, nu0, ncp = sigma02)` instead, this would imply that the scale parameter of the Inverse Chi-Square distribution is 1, which is not the case here. We have $$\sigma_0^2 = 1$$, not $$\sigma_0^2 = \frac{1}{\nu_0}$$. Hence, the correct code is `sigma2 <- 1 / rchisq(n, nu0, ncp = nu0 * sigma02)`. I hope this clarifies your question! Let me know if you have any more questions.
+
+
+
+
+
+
+

@@ -1,0 +1,311 @@
+---
+title: "Lab3"
+author: "Xuan Wang & Lepeng Zhang"
+date: "2024-05-08"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.pos = "!h")
+```
+
+# Question 1 Gibbs sampling for the logistic regression
+
+## 1a)
+
+```{r, 1a, echo = TRUE}
+# Load necessary libraries
+library(MASS)
+library(BayesLogit)
+library(coda)
+library(mvtnorm)
+set.seed(12345)
+
+
+# Load the data
+data <- read.table("WomenAtWork.dat", header = TRUE)
+
+# Define the logistic function
+logistic <- function(x) {
+  return(exp(x) / (1 + exp(x)))
+}
+
+# Define Response and Features
+y <- data$Work
+X <- as.matrix(data[,-1])
+n <- nrow(X)
+p <- ncol(X)
+
+
+# Initialize parameters
+tau <- 3
+B <- diag(rep(tau^2, p))
+b <- rep(0, p)
+w <- rep(1, n)
+k <- y - 1/2
+
+# Gibbs sampler
+n_iter <- 1000
+chain_b <- matrix(0, nrow = n_iter, ncol = p)
+for (iter in 1:n_iter) {
+  for (i in 1:n) {
+    w[i] <- rpg(1, abs(X[i,] %*% b) + 1e-10)
+  }
+  Vw <- solve(t(X) %*% diag(w) %*% X + solve(B))
+  mw <- Vw %*% (t(X) %*% k + solve(B) %*% b)
+  b <- rnorm(p, mean = mw, sd = sqrt(diag(Vw)))
+  chain_b[iter,] <- b
+}
+
+# Evaluate convergence
+chain_b_mcmc <- mcmc(chain_b)
+summary(chain_b_mcmc)
+
+var_names <- colnames(X)
+par(mfrow = c(2, 2)) 
+for (i in 1:p) {
+  plot(chain_b[, i], main = paste("Trace of", var_names[i]), type = "l", xlab='Iterations', ylab= paste(var_names[i]))
+}
+par(mfrow = c(1, 1))  # Reset the plot layout
+
+
+# Calculate Inefficiency Factors (IFs)
+IFs <- apply(chain_b, 2, function(x) {
+  acf_x <- acf(x, plot = FALSE)$acf[,,1]
+  1 + 2 * sum(acf_x[2:length(acf_x)])
+})
+
+cat("The Ineffciency Factors (IFs) is: \n")
+cat(IFs)
+```
+
+```{r, 1b, echo = TRUE}
+# Compute 90% credible interval
+x_new <- c(1, 22, 12, 7, 38, 1, 0)
+pr_y <- logistic(x_new %*% t(chain_b))
+CI_90 <- quantile(pr_y, probs = c(0.05, 0.95), na.rm = TRUE)
+cat("90% equal tail credible interval for Pr(y = 1|x) is: ", CI_90)
+```
+
+```{r, 1d, echo = TRUE}
+
+
+```
+
+# Question 2 Metropolis Random Walk for Poisson regression
+
+## 2a)
+
+```{r, 2a, echo = TRUE}
+# Load necessary libraries
+library(MASS)
+set.seed(12345)
+# Load the data
+data <- read.table("eBayNumberOfBidderData_2024.dat", header = TRUE)
+
+# Obtain the maximum likelihood estimator of β in the Poisson regression model
+model <- glm(nBids ~ PowerSeller + VerifyID + Sealed + Minblem + MajBlem + LargNeg + LogBook + MinBidShare, 
+             family = poisson(link = "log"), data = data)
+summary(model)
+
+
+```
+
+According to above results, the significant covariates are: Intercept, VerifyID, Sealed, and MinBidShare.
+
+```{r, 2b, echo = TRUE}
+# Bayesian analysis of the Poisson regression
+prior <- function(beta, X, y) {
+  n <- dim(X)[1]
+  p <- dim(X)[2]
+  beta_prior <- rep(0, p)
+  Sigma_prior <- 100 * solve(t(X) %*% X)
+  dmvnorm(beta, mean = beta_prior, sigma = Sigma_prior)
+}
+
+posterior <- function(beta, X, y) {
+  likelihood <- sum(dpois(y, lambda = exp(X %*% beta), log = TRUE))
+  prior <- prior(beta, X, y)
+  return(likelihood + prior)
+}
+
+optim_result <- optim(par = coef(model), fn = posterior, X = model.matrix(model), y = data$nBids, 
+                      control = list(fnscale = -1), hessian = TRUE)
+beta_hat <- optim_result$par
+Sigma_hat <- solve(-optim_result$hessian)
+
+print(beta_hat)
+```
+
+```{r, 2c, echo = TRUE}
+# Metropolis algorithm
+metropolis <- function(posterior, init, iter, Sigma, c, X, y) {
+  chain <- matrix(NA, nrow = iter, ncol = length(init))
+  chain[1, ] <- init
+  for (i in 2:iter) {
+    proposal <- mvrnorm(n = 1, mu = chain[(i - 1), ], Sigma = c * Sigma)
+    log_prob <- exp(posterior(proposal, X, y) - posterior(chain[(i - 1), ], X, y))
+    accept_prob <- min(1,log_prob)
+    if (runif(1) <= accept_prob) {
+      chain[i, ] <- proposal
+    } else {
+      chain[i, ] <- chain[(i - 1), ]
+    }
+  }
+  return(chain)
+}
+
+chain <- metropolis(posterior, init = beta_hat, iter = 10000, Sigma = Sigma_hat, c = 0.1, 
+                   X = model.matrix(model), y = data$nBids)
+
+names <- colnames(data[,-1])
+par(mfrow = c(2, 2)) 
+for (i in 1:9) {
+  plot(chain[, i], main = paste("Trace of", names[i]), type = "l", xlab='Iterations', ylab= paste(names[i]))
+}
+par(mfrow = c(1, 1))  # Reset the plot layout
+
+```
+
+```{r, 2d, echo = TRUE}
+# Predictive distribution
+new_auction <- c(1, 1, 0, 1, 0, 1, 0, 1.2, 0.8)
+pred_draws <- rpois(10000, lambda = exp(new_auction %*% t(chain)))
+hist(pred_draws, freq = FALSE, main = "Predictive distribution", xlab = "Number of bidders")
+prob_no_bidders <- mean(pred_draws == 0)
+cat("The probability of no bidders in this new auction:" , prob_no_bidders)
+```
+
+# Question 3 Time series models in Stan
+
+## 3a)
+
+```{r, 3a, echo = TRUE, error=FALSE, message=FALSE, warning=FALSE}
+# Load required library
+library(rstan)
+set.seed(12345)
+# Function to simulate AR(1) process
+simulate_ar1 <- function(mu, phi, sigma_sq, T) {
+  x <- numeric(T)
+  x[1] <- mu
+  for (t in 2:T) {
+    e_t <- rnorm(1, mean = 0, sd = sqrt(sigma_sq))
+    x[t] <- mu + phi * (x[t-1] - mu) + e_t
+  }
+  return(x)
+}
+
+# Simulate AR(1) process
+mu <- 9
+sigma_sq <- 4
+T <- 250
+phi_values <- seq(-1, 1, by = 0.2)
+par(mfrow = c(2, 2)) 
+for (phi in phi_values) {
+  x <- simulate_ar1(mu, phi, sigma_sq, T)
+  plot(x, main = paste("AR(1) process with phi =", phi), type = "l")
+}
+par(mfrow = c(1, 1))  # Reset the plot layout
+
+
+```
+
+$\phi$ close to -1: The plot shows a strong negative autocorrelation. That is, if the process was high (or low) at one point, it is likely to be low (or high) at the next point. This aligns with the first plot that there is a wider up and down range as the process frequently changes between high and low values.
+
+$\phi$ close to 0: The plot shows there are not too much autocorrelation. The values in the process are not influenced by their preceding values. As a result, it can be seen that the fluctuation becomes smooth and within a regular range, meaning the process appears more random and less predictable.
+
+$\phi$ close to 1: The plot shows a strong positive autocorrelation. If the process was high (or low) at one point, it is likely to be high (or low) at the next point. This can lead to irregular up and down fluctuations as the process tends to maintain its current state for longer periods, as the last plot shown.
+
+```{r, 3b, echo = TRUE, warning=FALSE, message=FALSE, error=FALSE, results='hide'}
+set.seed(12345)
+# Stan code
+stan_code <- "
+data {
+  int<lower=0> T;
+  vector[T] y;
+}
+parameters {
+  real mu;
+  real<lower=-1, upper=1> phi;
+  real<lower=0> sigma;
+}
+model {
+  vector[T] nu;
+  nu[1] <- mu;
+  for (t in 2:T) {
+    nu[t] <- mu + phi * (y[t-1] - mu);
+  }
+  y ~ normal(nu, sigma);
+}
+"
+
+# Compile Stan model
+stan_model <- stan_model(model_code = stan_code)
+
+# Simulate two AR(1) processes
+x1 <- simulate_ar1(mu, 0.3, sigma_sq, T)
+y1 <- simulate_ar1(mu, 0.97, sigma_sq, T)
+
+# Fit Stan model to the simulated data
+fit_x1 <- sampling(stan_model, data = list(T = T, y = x1))
+fit_y1 <- sampling(stan_model, data = list(T = T, y = y1))
+
+
+```
+
+```{r, 3b1, echo = TRUE}
+# Print the results
+print(summary(fit_x1)$summary)
+print(summary(fit_y1)$summary)
+
+```
+
+From above results, for the first dataset from $\phi$=0.3,
+
+| parameters | mean  | 95% credible intervals | the number of effective samples |
+|--------------|--------------|------------------|--------------------------|
+| mu         | 9.191 | 8.895-9.489            | 3281                            |
+| phi        | 0.242 | 0.201-0.369            | 3660                            |
+| sigma      | 1.849 | 1.689-2.022            | 4044                            |
+
+for the second dataset from $\phi$=0.97,
+
+| parameters | mean  | 95% credible intervals | the number of effective samples |
+|--------------|--------------|------------------|--------------------------|
+| mu         | 8.075 | 4.598-11.991           | 2518                            |
+| phi        | 0.969 | 0.935-0.996            | 1881                            |
+| sigma      | 1.914 | 1.749-2.093            | 2538                            |
+
+```{r, 3b21, echo = TRUE}
+
+stan_trace(fit_x1, pars=c("mu"))
+stan_trace(fit_x1, pars=c("phi"))
+stan_trace(fit_x1, pars=c("sigma"))
+```
+
+Above three trace plots are for the first dataset from $\phi$=0.3, it can be seen that all three parameters converge quite well in the stationery distribution, the plots are also symmetric around the mean value.
+
+```{r, 3b22, echo = TRUE}
+
+stan_trace(fit_y1, pars=c("mu"))
+stan_trace(fit_y1, pars=c("phi"))
+stan_trace(fit_y1, pars=c("sigma"))
+```
+
+Above three trace plots are for the second dataset from $\phi$=0.97, it can be seen that the parameter mu doesn't converge well, the variance of the points is bigger. This is because high $\phi$ leads to a strong positive autocorrelation. 
+
+```{r, 3b23, echo = TRUE, warning=FALSE}
+
+pairs(fit_x1, pars = c("mu", "phi"), main = "The first dataset from phi=0.3")
+pairs(fit_y1, pars = c("mu", "phi"), main = "The second dataset from phi=0.97")
+
+```
+
+From above joint posterior plots of $\mu$ and $\phi$, the first dataset generates symmetric ellipsoid shape, which could be possibly a multivariate normal distribution. While the second dataset generates a deformed ellipsoid, which are hard to guess the distribution.
+
+
+
+
+
